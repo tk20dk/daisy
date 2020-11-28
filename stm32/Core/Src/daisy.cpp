@@ -1,7 +1,9 @@
 #include "daisy.h"
 
 
+#define GPS_CLIENT_no
 #define GPS_SERVER_no
+#define SBUS_SERVER
 
 extern SPI_HandleTypeDef hspi1;
 extern UART_HandleTypeDef huart1;
@@ -10,6 +12,37 @@ TSpi Spi( hspi1 );
 TGps Gps( huart1 );
 TDaisy Daisy;
 TSystem System;
+
+struct TSbusFrame
+{
+  static uint8_t const SbusSOF       = 0x0f;
+  static uint8_t const SbusEOF       = 0x00;
+  static uint8_t const FlagNull      = 0x00;
+  static uint8_t const FlagCh17      = 0x01;
+  static uint8_t const FlagCh18      = 0x02;
+  static uint8_t const FlagLostFrame = 0x04;
+  static uint8_t const FlagFailSafe  = 0x08;
+
+  uint8_t Sof;
+  uint32_t Ch1:11;
+  uint32_t Ch2:11;
+  uint32_t Ch3:11;
+  uint32_t Ch4:11;
+  uint32_t Ch5:11;
+  uint32_t Ch6:11;
+  uint32_t Ch7:11;
+  uint32_t Ch8:11;
+  uint32_t Ch9:11;
+  uint32_t Ch10:11;
+  uint32_t Ch11:11;
+  uint32_t Ch12:11;
+  uint32_t Ch13:11;
+  uint32_t Ch14:11;
+  uint32_t Ch15:11;
+  uint32_t Ch16:11;
+  uint8_t Flag;
+  uint8_t Eof;
+} __attribute__((__packed__));
 
 void TDaisy::Setup()
 {
@@ -55,6 +88,41 @@ void TDaisy::Loop()
     Radio868.Interrupt();
   }
 
+#ifdef SBUS_SERVER
+  auto const Tick = HAL_GetTick();
+  static uint32_t LastTick;
+  if(( Tick > LastTick ) && ( Tick % 1000 ) == 0 )
+  {
+    LastTick = Tick;
+
+    TSbusFrame SbusFrame;
+    SbusFrame.Sof = TSbusFrame::SbusSOF;
+    SbusFrame.Ch1 = 0;
+    SbusFrame.Ch2 = 0;
+    SbusFrame.Ch3 = 0;
+    SbusFrame.Ch4 = 0;
+    SbusFrame.Ch5 = 0;
+    SbusFrame.Ch6 = 0;
+    SbusFrame.Ch7 = 0;
+    SbusFrame.Ch8 = 0;
+    SbusFrame.Ch9 = 0;
+    SbusFrame.Ch10 = 0;
+    SbusFrame.Ch11 = 0;
+    SbusFrame.Ch12 = 0;
+    SbusFrame.Ch13 = 0;
+    SbusFrame.Ch14 = 0;
+    SbusFrame.Ch15 = 0;
+    SbusFrame.Ch16 = 0;
+    SbusFrame.Flag = TSbusFrame::FlagNull;
+    SbusFrame.Eof = TSbusFrame::SbusEOF;
+
+    if(( Tick % 2000 ) == 0 )
+      Radio433.Transmit( &SbusFrame, sizeof( SbusFrame ));
+    else
+      Radio868.Transmit( &SbusFrame, sizeof( SbusFrame ));
+  }
+#endif
+
 #ifdef GPS_SERVER
   auto const Tick = HAL_GetTick();
   static uint32_t LastTick;
@@ -93,6 +161,7 @@ void TDaisy::Radio433Event( TRadioEvent const Event )
   union
   {
     uint8_t Buffer[ 256 ];
+    TSbusFrame SbusFrame;
     TGps::TDataRMC DataRMC;
   };
 
@@ -112,6 +181,11 @@ void TDaisy::Radio433Event( TRadioEvent const Event )
         DataRMC.LatDeg, DataRMC.LatMin, DataRMC.LatSec, DataRMC.LatSouth ? 'S' : 'N',
         DataRMC.LonDeg, DataRMC.LonMin, DataRMC.LonSec, DataRMC.LonWest ? 'W' : 'E' );
       }
+    else if( Length == sizeof( TSbusFrame ))
+    {
+      Hmi1Blue( 100 );
+      UsbPrintf( "433 Rssi:%4d Snr:%3d.%u Len:%u Sbus frame\n", Rssi, Snr / 10, abs(Snr) % 10, Length );
+    }
     else
     {
       UsbPrintf( "433 Rssi:%4d Snr:%3d.%u Len:%u Length error\n", Rssi, Snr / 10, abs(Snr) % 10, Length );
@@ -119,7 +193,8 @@ void TDaisy::Radio433Event( TRadioEvent const Event )
 
 #ifdef GPS_SERVER
     Radio433.Receive();
-#else
+#endif
+#ifdef GPS_CLIENT
     Radio433.Transmit( Buffer, Length);
 #endif
   }
@@ -159,6 +234,7 @@ void TDaisy::Radio868Event( TRadioEvent const Event )
   union
   {
     uint8_t Buffer[ 256 ];
+    TSbusFrame SbusFrame;
     TGps::TDataRMC DataRMC;
   };
 
@@ -178,6 +254,11 @@ void TDaisy::Radio868Event( TRadioEvent const Event )
         DataRMC.LatDeg, DataRMC.LatMin, DataRMC.LatSec, DataRMC.LatSouth ? 'S' : 'N',
         DataRMC.LonDeg, DataRMC.LonMin, DataRMC.LonSec, DataRMC.LonWest ? 'W' : 'E' );
     }
+    else if( Length == sizeof( TSbusFrame ))
+    {
+      Hmi1Blue( 100 );
+      UsbPrintf( "868 Rssi:%4d Snr:%3d.%u Len:%u Sbus frame\n", Rssi, Snr / 10, abs(Snr) % 10, Length );
+    }
     else
     {
       UsbPrintf( "868 Rssi:%4d Snr:%3d.%u Len:%u Length error\n", Rssi, Snr / 10, abs(Snr) % 10, Length );
@@ -185,7 +266,8 @@ void TDaisy::Radio868Event( TRadioEvent const Event )
 
 #ifdef GPS_SERVER
     Radio868.Receive();
-#else
+#endif
+#ifdef GPS_CLIENT
     Radio868.Transmit( Buffer, Length);
 #endif
   }
