@@ -3,6 +3,7 @@
 
 #define GPS_CLIENT_no
 #define GPS_SERVER_no
+#define SBUS_CLIENT_no
 #define SBUS_SERVER
 
 extern SPI_HandleTypeDef hspi1;
@@ -91,7 +92,7 @@ void TDaisy::Loop()
 #ifdef SBUS_SERVER
   auto const Tick = HAL_GetTick();
   static uint32_t LastTick;
-  if(( Tick > LastTick ) && ( Tick % 1000 ) == 0 )
+  if(( Tick > LastTick ) && ( Tick % 100 ) == 0 )
   {
     LastTick = Tick;
 
@@ -116,10 +117,7 @@ void TDaisy::Loop()
     SbusFrame.Flag = TSbusFrame::FlagNull;
     SbusFrame.Eof = TSbusFrame::SbusEOF;
 
-    if(( Tick % 2000 ) == 0 )
-      Radio433.Transmit( &SbusFrame, sizeof( SbusFrame ));
-    else
-      Radio868.Transmit( &SbusFrame, sizeof( SbusFrame ));
+    Radio433.Transmit( &SbusFrame, sizeof( SbusFrame ));
   }
 #endif
 
@@ -173,7 +171,7 @@ void TDaisy::Radio433Event( TRadioEvent const Event )
 
     if( Length == sizeof( TGps::TDataRMC ))
     {
-      Hmi1Blue( 100 );
+      Hmi1Blue( 10 );
       UsbPrintf( "-433 %4d %3d.%u %06u %3u.%03u : %02u %u.%05u %c %03u %u.%05u %c\n",
         Rssi, Snr / 10, abs(Snr) % 10,
         DataRMC.Time,
@@ -183,7 +181,7 @@ void TDaisy::Radio433Event( TRadioEvent const Event )
       }
     else if( Length == sizeof( TSbusFrame ))
     {
-      Hmi1Blue( 100 );
+      Hmi1Blue( 10 );
       UsbPrintf( "433 Rssi:%4d Snr:%3d.%u Len:%u Sbus frame\n", Rssi, Snr / 10, abs(Snr) % 10, Length );
     }
     else
@@ -197,11 +195,17 @@ void TDaisy::Radio433Event( TRadioEvent const Event )
 #ifdef GPS_CLIENT
     Radio433.Transmit( Buffer, Length);
 #endif
+#ifdef SBUS_SERVER
+    Radio433.Receive();
+#endif
+#ifdef SBUS_CLIENT
+    Radio433.Receive();
+#endif
   }
 
   if( Event == TRadioEvent::TxDone )
   {
-    Hmi1Blue( 100 );
+    Hmi1Blue( 10 );
     Radio433.Receive();
   }
 
@@ -246,7 +250,7 @@ void TDaisy::Radio868Event( TRadioEvent const Event )
 
     if( Length == sizeof( TGps::TDataRMC ))
     {
-      Hmi2Blue( 100 );
+      Hmi2Blue( 10 );
       UsbPrintf( "-868 %4d %3d.%u %06u %3u.%03u : %02u %u.%05u %c %03u %u.%05u %c\n",
         Rssi, Snr / 10, abs(Snr) % 10,
         DataRMC.Time,
@@ -256,7 +260,7 @@ void TDaisy::Radio868Event( TRadioEvent const Event )
     }
     else if( Length == sizeof( TSbusFrame ))
     {
-      Hmi1Blue( 100 );
+      Hmi2Blue( 10 );
       UsbPrintf( "868 Rssi:%4d Snr:%3d.%u Len:%u Sbus frame\n", Rssi, Snr / 10, abs(Snr) % 10, Length );
     }
     else
@@ -270,11 +274,17 @@ void TDaisy::Radio868Event( TRadioEvent const Event )
 #ifdef GPS_CLIENT
     Radio868.Transmit( Buffer, Length);
 #endif
+#ifdef SBUS_SERVER
+    Radio868.Receive();
+#endif
+#ifdef SBUS_CLIENT
+    Radio868.Receive();
+#endif
   }
 
   if( Event == TRadioEvent::TxDone )
   {
-    Hmi2Blue( 100 );
+    Hmi2Blue( 10 );
     Radio868.Receive();
   }
 
